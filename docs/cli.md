@@ -300,7 +300,7 @@ Headless by default: a new document, or `--in FILE`; `--out FILE` saves the resu
 here; the automation roots are refused then, because only the app's own roots confine it.
 
 `--model` is `deepseek-flash` (the default) or `deepseek-v4-pro`. Thinking is on unless
-`--no-thinking`. `--max-steps N` (1–100, default 40) bounds the model's turns and `--max-tokens N`
+`--no-thinking`. `--max-steps N` (1–100, default 80) bounds the model's turns and `--max-tokens N`
 (16–1,000,000, default 1,000,000: the whole range, so the app never cuts an answer short) the
 answer budget, thinking included. `--mode` picks what it may do, as the panel's agent picker does:
 `agent` (the default) changes the file, `ask` only looks with no editing tool offered, and `plan`

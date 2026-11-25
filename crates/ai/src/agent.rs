@@ -25,7 +25,11 @@ impl Default for AgentConfig {
         // toward it. An endpoint that takes less says so and `ModelError::max_tokens_limit`
         // lowers it. Kept equal to `figcraft_engine::ASSISTANT_TOKENS_MAX` (this crate sits above
         // the engine, so it cannot name it).
-        Self { max_steps: 40, max_tool_chars: 60_000, max_output_tokens: 1_000_000, max_nudges: 2 }
+        //
+        // 80 turns: a big file (a whole screen set, an audit of a document) takes more than the 40
+        // that used to be here, and running out mid-task is what left a thread that couldn't be
+        // continued. Still bounded, and `--max-steps` sets it.
+        Self { max_steps: 80, max_tool_chars: 60_000, max_output_tokens: 1_000_000, max_nudges: 2 }
     }
 }
 
@@ -49,6 +53,11 @@ pub enum Step {
 const NUDGE: &str = "You stopped without calling a tool and without finishing, so nothing changed. \
 Keep going now: call the tools you need until the task is done, and only then answer with a short \
 summary. Do not describe what you are about to do instead of doing it.";
+
+/// The answer to a tool call the budget stopped from running. The API requires it (a `tool_calls`
+/// message must be followed by its `tool` messages), and the model reads it before trying again.
+const UNRUN: &str = "not run: the turn limit for this prompt was reached before this tool call \
+could run. Nothing changed because of it. Ask for it again if it is still needed.";
 
 /// One conversation with the model.
 #[derive(Clone, Debug)]
@@ -118,6 +127,13 @@ impl Agent {
             return Step::Done { text };
         }
         if self.steps >= self.config.max_steps {
+            // The budget is spent with tool calls still unanswered. Every `tool_calls` message must
+            // be followed by one `tool` message per call (DeepSeek rejects the next request with
+            // HTTP 400 otherwise, which is what killed "continue"), so say plainly that these were
+            // not run: the model reads it and can ask again.
+            for call in &calls {
+                self.messages.push(ChatMessage::tool(call.id.clone(), UNRUN.to_string()));
+            }
             self.finished = true;
             return Step::Stopped { text };
         }

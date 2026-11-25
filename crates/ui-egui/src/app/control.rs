@@ -115,6 +115,7 @@ impl FigApp {
             "endpoint": self.ui.assistant.endpoint,
             "keySaved": !self.session.prefs.assistant_key.is_empty(),
             "busy": self.ui.assistant.busy(),
+            "phase": self.ui.assistant.phase.id(),
             "entries": self.ui.assistant.entries.len(),
             "references": self.ui.assistant.references().iter().map(|r| r.id()).collect::<Vec<_>>(),
         });

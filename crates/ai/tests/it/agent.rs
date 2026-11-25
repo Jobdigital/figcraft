@@ -225,3 +225,46 @@ fn a_new_prompt_gets_the_step_budget_back() {
     agent.user("two");
     assert!(matches!(agent.accept(tool_call("c", "view.zoomIn")), Step::Tools { .. }), "the new prompt gets its own budget, not the spent one");
 }
+
+/// The rule the API enforces: every `assistant` message that asks for tools is followed by one
+/// `tool` message per call. A request breaking it is refused with HTTP 400.
+fn thread_is_valid(messages: &[figcraft_ai::ChatMessage]) -> bool {
+    for (i, m) in messages.iter().enumerate() {
+        if m.role != figcraft_ai::Role::Assistant || m.tool_calls.is_empty() {
+            continue;
+        }
+        for call in &m.tool_calls {
+            let answered = messages[i + 1..].iter().any(|n| n.role == figcraft_ai::Role::Tool && n.tool_call_id.as_deref() == Some(call.id.as_str()));
+            if !answered {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+#[test]
+fn a_turn_stopped_at_the_limit_answers_its_tool_calls_so_continue_works() {
+    // What happened in the app: 40 turns spent, the last answer asked for a tool nobody ran, and
+    // the next prompt was refused with "An assistant message with 'tool_calls' must be followed by
+    // tool messages...".
+    let mut agent = Agent::new("system", vec![], AgentConfig { max_steps: 2, ..Default::default() });
+    agent.user("do it");
+    let step = agent.accept(tool_call("c1", "view.zoomIn"));
+    let Step::Tools { calls, .. } = step else { panic!("the first step runs its tool: {step:?}") };
+    for call in &calls {
+        agent.tool_result(call, &figcraft_ai::ToolOutcome::text("ok"));
+    }
+    assert!(matches!(agent.accept(tool_call("c2", "view.zoomIn")), Step::Stopped { .. }), "the second step is the budget");
+
+    let request = agent.request("deepseek-flash", true);
+    assert!(thread_is_valid(&request.messages), "the thread must be acceptable to the API: {:#?}", request.messages);
+    let last = request.messages.last().expect("the unanswered call's answer");
+    assert_eq!((last.role, last.tool_call_id.as_deref()), (figcraft_ai::Role::Tool, Some("c2")));
+    assert!(last.content.contains("not run"), "{}", last.content);
+
+    // And "continue" now goes through: the new prompt gets a turn of its own.
+    agent.user("continue");
+    assert!(thread_is_valid(&agent.request("deepseek-flash", true).messages), "still valid after the new prompt");
+    assert!(matches!(agent.accept(tool_call("c3", "view.zoomIn")), Step::Tools { .. }));
+}

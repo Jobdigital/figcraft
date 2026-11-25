@@ -2277,6 +2277,11 @@ tokens mid-plan — is not treated as a finished turn: the Assistant nudges it t
 and then says so instead of leaving the file untouched without a word. Asking again with
 "continue" is always allowed.
 
+When the turn budget runs out with tool calls still pending, each one is answered "not run: the
+turn limit…" instead of being left dangling: the API refuses a thread where an assistant message
+asks for tools nobody answered (HTTP 400), which is what used to break "continue". The note says the
+run stopped, and continuing picks the work up with the history intact.
+
 ```sh
 DEEPSEEK_API_KEY=sk-… figcraft-cli agent --prompt "Make a pricing card, then check it" --out out.figcraft
 # Drive the running app instead (start it with: figcraft --control 7979)
@@ -2284,7 +2289,7 @@ figcraft-cli agent --attach 7979 --prompt "Tidy up the layers on this page"
 ```
 
 Models are `deepseek-flash` (the default) and `deepseek-v4-pro`. Thinking is on unless
-`--no-thinking` is passed; the panel has a Thinking checkbox. `--max-steps N` (1–100, default 40)
+`--no-thinking` is passed; the panel has a Thinking checkbox. `--max-steps N` (1–100, default 80)
 bounds the model's turns, and `--max-tokens N` (16–1,000,000, default 1,000,000: the whole range, so the app never cuts an answer short) the answer budget;
 the panel's Settings has the same budget, which `pref.assistant {maxTokens}` also sets. Thinking
 counts toward it, so a long plan leaves room for the answer instead of using it all up. When the

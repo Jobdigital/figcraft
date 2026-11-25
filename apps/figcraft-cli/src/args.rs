@@ -261,7 +261,7 @@ pub struct AgentArgs {
     #[arg(long)]
     pub no_thinking: bool,
     /// The most model turns before it stops (1–100)
-    #[arg(long, value_name = "N", default_value_t = 40, value_parser = clap::value_parser!(u64).range(1..=100))]
+    #[arg(long, value_name = "N", default_value_t = 80, value_parser = clap::value_parser!(u64).range(1..=100))]
     pub max_steps: u64,
     /// What the Assistant may do: agent changes the file, ask only looks, plan writes the steps
     #[arg(long, value_name = "MODE", default_value = "agent", value_parser = ["agent", "ask", "plan"])]
@@ -580,7 +580,7 @@ mod tests {
         assert!(a.json && a.no_stream);
         assert_eq!(a.base_url.as_deref(), Some("http://localhost:11434/v1"));
         let Command::Agent(a) = ok(&["agent", "--prompt=-"]) else { panic!("agent") };
-        assert_eq!((a.model.as_str(), a.max_steps), (figcraft_ai::DEFAULT_MODEL, 40));
+        assert_eq!((a.model.as_str(), a.max_steps), (figcraft_ai::DEFAULT_MODEL, 80), "a big task gets more than 40 turns");
         assert_eq!(a.max_tokens, u64::from(figcraft_engine::ASSISTANT_TOKENS_MAX), "the whole budget by default");
         assert_eq!(a.mode, "agent", "the default mode changes the file");
         let Command::Agent(a) = ok(&["agent", "--prompt=-", "--mode", "ask"]) else { panic!("agent") };

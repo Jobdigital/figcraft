@@ -107,6 +107,19 @@ pub enum Phase {
     Failed(String),
 }
 
+impl Phase {
+    /// The name `ui.inspect` publishes: what automation reads to tell a run from a failure.
+    pub fn id(&self) -> &'static str {
+        match self {
+            Phase::Idle => "idle",
+            Phase::Waiting => "waiting",
+            Phase::Streaming => "streaming",
+            Phase::Tool(_) => "tool",
+            Phase::Failed(_) => "failed",
+        }
+    }
+}
+
 /// Something a prompt can name with `#name`, resolved against the open file when the message is
 /// sent (so it is always current): a chat client's references, aimed at a design file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
