@@ -18,7 +18,11 @@
 //!   module, ready for Plugins ▸ Development ▸ Import plugin from manifest…
 //! - `bench`   release-build timings at 1k/10k/50k layers (`bench 1000,10000` for other sizes) and
 //!   with a synthetic design system used by 2,000 instances
+//! - `dev`     the fast loop: build the app in the dev profile, run it, and rebuild and restart it
+//!   on every save (`dev --release` for the slow one; `dev --control 7979 -- FILE` to hand the app
+//!   arguments)
 
+mod dev;
 mod docs_check;
 mod icon;
 mod layers;
@@ -54,8 +58,17 @@ fn main() -> ExitCode {
         "wasm" => wasm(),
         "plugins" => plugins(),
         "bench" => bench(args.get(1).map_or("1000,10000,50000", String::as_str)),
+        "dev" => match dev::run(&root(), &args[1..]) {
+            Ok(()) => true,
+            Err(why) => {
+                eprintln!("{why}");
+                false
+            }
+        },
         _ => {
-            eprintln!("tasks: ci, test, i18n-report, layers, assets, docs, parity, version [set X.Y.Z], icon, wasm, plugins, bench [SIZES]");
+            eprintln!(
+                "tasks: ci, test, i18n-report, layers, assets, docs, parity, version [set X.Y.Z], icon, wasm, plugins, bench [SIZES], dev [--release] [--no-run] [--control PORT] [-- APP ARGS]"
+            );
             task == "help"
         }
     };
@@ -105,6 +118,8 @@ fn wasm() -> bool {
         "figcraft-collab-net",
         "-p",
         "figcraft-engine",
+        "-p",
+        "figcraft-ai",
         "-p",
         "figcraft-ui-egui",
         "-p",

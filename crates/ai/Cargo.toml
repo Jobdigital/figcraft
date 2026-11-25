@@ -1,0 +1,20 @@
+[package]
+name = "figcraft-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FigCraft's AI assistant core: an OpenAI-compatible DeepSeek client, the tool-calling agent loop, and the bridge to the MCP tools (no UI)"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+
+# Native only: the browser build has no HTTP client and can't keep an API key secret, and it must
+# not carry the MCP tools either (the Assistant panel says it needs the desktop app there).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+figcraft-mcp = { workspace = true }
+ureq = { workspace = true }

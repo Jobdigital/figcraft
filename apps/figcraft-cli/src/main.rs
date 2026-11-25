@@ -7,10 +7,12 @@ mod args;
 mod files;
 mod perf;
 
-use std::io::Write;
+use std::io::{Read as _, Write as _};
 use std::process::ExitCode;
+use std::sync::atomic::AtomicBool;
 
-use args::{Cli, Command, ConnectCommand, PluginCommand, RootArgs};
+use args::{AgentArgs, Cli, Command, ConnectCommand, PluginCommand, RootArgs};
+use figcraft_ai::{Agent, AgentConfig, ChatModel, DeepSeek, ModelEvent, Scope, Step};
 use serde_json::{Value, json};
 
 /// The automation roots a file subcommand was given, if any. Omitting both leaves the run
@@ -93,6 +95,7 @@ fn run(cli: Cli) -> CliResult<ExitCode> {
         }
         // `--attach` conflicts with the roots: the app runs the commands, only its own roots can confine them.
         Command::Mcp(a) => mcp(a.attach.as_deref(), a.timeout, roots_of(&a.roots)?),
+        Command::Agent(a) => confined(&a.roots, || agent(&a)),
         Command::Plugin { command: PluginCommand::Publish(a) } => publish_plugin(&a.folder, &a.server),
         Command::Connect { command: ConnectCommand::Publish(a) } => confined(&a.roots, || files::connect_publish(&a.file, &a.mappings, a.dry_run)),
         Command::Perf(a) => {
@@ -170,4 +173,174 @@ fn mcp(attach: Option<&str>, timeout: Option<u64>, roots: Option<figcraft_engine
     let stdout = std::io::stdout();
     server.serve(stdin.lock(), stdout.lock()).map_err(|e| format!("stdio: {e}"))?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// `figcraft-cli agent`: DeepSeek drives the MCP tools, headless or attached. The key comes from
+/// the environment only; the prompt from a flag, a file or standard input.
+fn agent(a: &AgentArgs) -> CliResult<ExitCode> {
+    let prompt = read_prompt(a)?;
+    let mut config = figcraft_ai::DeepSeekConfig::from_env();
+    if let Some(url) = &a.base_url {
+        config = config.with_base_url(url);
+    }
+    if config.api_key.is_empty() {
+        return Err(CliError::Failed(format!(
+            "no DeepSeek API key: set {} (there is no --api-key, so the key stays out of the shell history and the process list)",
+            figcraft_ai::API_KEY_ENV
+        )));
+    }
+    let mut backend: Box<dyn figcraft_mcp::Backend> = match &a.attach {
+        Some(addr) => {
+            let no_app = |e: std::io::Error| format!("can't reach the FigCraft app at {addr}: {e} (start it with `figcraft --control PORT`)");
+            Box::new(figcraft_mcp::Attached::connect(addr).map_err(no_app)?)
+        }
+        None => Box::new(figcraft_mcp::Headless::new()),
+    };
+    if let Some(path) = &a.input {
+        let opened = figcraft_mcp::call_tool(backend.as_mut(), "open_file", &json!({"path": path}));
+        if opened.is_error {
+            return Err(CliError::Failed(format!("can't open {path}: {}", opened.first_text())));
+        }
+    }
+    // The mode decides the rules and the tools: Ask and Plan never get one that changes the file.
+    let mode = figcraft_ai::Mode::from_id(&a.mode).unwrap_or_default();
+    let tools = figcraft_ai::openai_tools(&figcraft_ai::tool_definitions_for_mode(mode));
+    let mut agent = Agent::new(
+        figcraft_ai::system_prompt_for(Scope::Automation, mode),
+        tools,
+        AgentConfig { max_steps: a.max_steps as usize, max_output_tokens: a.max_tokens as u32, ..Default::default() },
+    );
+    agent.user(prompt);
+    let model = DeepSeek::new(config);
+    let mut as_agent = figcraft_mcp::AsAgent::new(backend.as_mut(), "DeepSeek");
+    let mut streamed = false;
+    loop {
+        let mut request = agent.request(&a.model, !a.no_thinking);
+        request.stream = !a.no_stream;
+        let mut on_event = |event: ModelEvent| {
+            if let ModelEvent::Content(text) = event
+                && !a.json
+                && !a.no_stream
+            {
+                streamed = true;
+                print!("{text}");
+                let _ = std::io::stdout().flush();
+            }
+        };
+        let response = match model.complete(&request, &mut on_event, &AtomicBool::new(false)) {
+            Ok(response) => response,
+            Err(e) => {
+                // The endpoint takes fewer tokens than the budget: lower it to what it says and ask
+                // again rather than failing on a limit the user can't see.
+                if let Some(limit) = e.max_tokens_limit().filter(|limit| *limit < agent.max_output_tokens()) {
+                    agent.set_max_output_tokens(limit);
+                    let text = format!("this endpoint takes at most {limit} tokens per answer: using that");
+                    if a.json {
+                        println!("{}", json!({"type": "note", "text": text}));
+                    } else {
+                        eprintln!("note: {text}");
+                    }
+                    continue;
+                }
+                return Err(CliError::Failed(e.to_string()));
+            }
+        };
+        match agent.accept(response) {
+            Step::Tools { calls, text } => {
+                if a.no_stream && !text.is_empty() && !a.json {
+                    println!("{text}");
+                }
+                for call in calls {
+                    if a.json {
+                        println!("{}", json!({"type": "tool", "name": call.name, "arguments": call.arguments}));
+                    } else {
+                        eprintln!("-> {} {}", call.name, one_line(&call.arguments));
+                    }
+                    let outcome = figcraft_ai::execute_tool(&mut as_agent, &call);
+                    if outcome.is_error {
+                        eprintln!("   error: {}", one_line(&outcome.text));
+                    }
+                    agent.tool_result(&call, &outcome);
+                }
+            }
+            Step::Done { text } => {
+                if a.json {
+                    println!("{}", json!({"type": "done", "text": text}));
+                } else if !streamed {
+                    println!("{text}");
+                }
+                break;
+            }
+            Step::Stopped { text } => {
+                if a.json {
+                    println!("{}", json!({"type": "stopped", "text": text}));
+                } else if !streamed && !text.is_empty() {
+                    println!("{text}");
+                }
+                return Err(CliError::Failed(format!("the model used all {} turns without a final answer", a.max_steps)));
+            }
+            Step::Incomplete { text, cut_off } => {
+                if a.json {
+                    println!("{}", json!({"type": "incomplete", "text": text, "cutOff": cut_off}));
+                } else if !streamed && !text.is_empty() {
+                    println!("{text}");
+                }
+                if !agent.nudge() {
+                    let why = if cut_off { "the answer ran out of output tokens" } else { "the model answered with nothing" };
+                    return Err(CliError::Failed(format!("{why}, twice: stopping instead of looping")));
+                }
+            }
+        }
+    }
+    if let Some(out) = &a.out {
+        let saved = figcraft_mcp::call_tool(&mut as_agent, "save_file", &json!({"path": out}));
+        if saved.is_error {
+            return Err(CliError::Failed(format!("can't save {out}: {}", saved.first_text())));
+        }
+        if a.json {
+            println!("{}", json!({"type": "saved", "path": out}));
+        } else {
+            eprintln!("wrote {out}");
+        }
+    } else if a.attach.is_none() {
+        eprintln!("note: changes are not saved (pass --out FILE)");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The prompt from `--prompt`, `--prompt-file` (`-` is standard input) or standard input, at most
+/// 1 MiB.
+fn read_prompt(a: &AgentArgs) -> CliResult<String> {
+    const MAX: u64 = 1024 * 1024;
+    let text = match (&a.prompt, &a.prompt_file) {
+        (Some(prompt), _) => prompt.clone(),
+        (None, Some(path)) if path == "-" => read_stdin(MAX)?,
+        (None, Some(path)) => {
+            let bytes = figcraft_engine::file_access::read_capped(path, MAX).map_err(|e| e.to_string())?;
+            String::from_utf8(bytes).map_err(|_| CliError::Failed(format!("{path}: not UTF-8")))?
+        }
+        (None, None) => read_stdin(MAX)?,
+    };
+    if text.trim().is_empty() {
+        return Err(CliError::Usage("the prompt is empty (pass --prompt TEXT, --prompt-file FILE, or write it on standard input)".into()));
+    }
+    Ok(text)
+}
+
+fn read_stdin(max: u64) -> CliResult<String> {
+    let mut text = String::new();
+    std::io::stdin().take(max + 1).read_to_string(&mut text).map_err(|e| CliError::Failed(format!("standard input: {e}")))?;
+    if text.len() as u64 > max {
+        return Err(CliError::Usage("the prompt is larger than 1 MiB".into()));
+    }
+    Ok(text)
+}
+
+/// One line for a terminal: controls become spaces and the text is cut at 160 characters.
+fn one_line(s: &str) -> String {
+    let mut out: String = s.chars().map(|c| if c.is_control() { ' ' } else { c }).take(160).collect();
+    if s.chars().count() > 160 {
+        out.push('…');
+    }
+    out.trim().to_string()
 }

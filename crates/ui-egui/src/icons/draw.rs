@@ -394,6 +394,24 @@ fn draw(p: &P, icon: Icon) {
             p.path(&b, true);
         }
         Actions => p.poly(&[(9.0, 2.0), (3.5, 9.0), (7.5, 9.0), (6.5, 14.0), (12.5, 7.0), (8.5, 7.0)], true),
+        Assistant => {
+            // Two four-pointed sparkles: the big one at the centre, a small one at its corner.
+            for (cx, cy, reach, pinch) in [(6.6, 8.2, 5.4, 1.5), (12.4, 12.2, 2.6, 0.7)] {
+                p.poly(
+                    &[
+                        (cx, cy - reach),
+                        (cx + pinch, cy - pinch),
+                        (cx + reach, cy),
+                        (cx + pinch, cy + pinch),
+                        (cx, cy + reach),
+                        (cx - pinch, cy + pinch),
+                        (cx - reach, cy),
+                        (cx - pinch, cy - pinch),
+                    ],
+                    true,
+                );
+            }
+        }
         Chevron => p.poly(&[(4.5, 6.0), (8.0, 9.5), (11.5, 6.0)], false),
         ChevronUp => p.poly(&[(4.5, 10.0), (8.0, 6.5), (11.5, 10.0)], false),
         ChevronRight => p.poly(&[(6.0, 4.5), (9.5, 8.0), (6.0, 11.5)], false),

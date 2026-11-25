@@ -563,11 +563,21 @@ No alpha blockers: the alpha gate in [`roadmap.md`](roadmap.md#alpha-gate) passe
 - **Landed (2026-10-27, narrow slice without a model):** MCP agent feedback — comments as the task
   queue (`comment.prompt`, **Copy for AI**, `fix_comments` / `watch_comments`,
   `figcraft://comments`), a bounded in-memory event log, `events.poll` and `wait_for_changes` for
-  live feedback. Any MCP client can drive a headless file or an attached app; no in-app model and no
-  network dependency.
+  live feedback. Any MCP client can drive a headless file or an attached app.
+- **Landed (2026-11-24, a hosted model):** the Assistant — `crates/ai` (a DeepSeek,
+  OpenAI-compatible chat client with function calling, streaming and the tool-calling loop) bridges
+  the MCP tool definitions to the model's functions, so both `figcraft-cli agent` (headless or
+  `--attach`) and **Help ▸ Assistant** in the desktop app edit a document through the same commands
+  every other agent uses. The key comes from `DEEPSEEK_API_KEY`, or from the panel, which saves it
+  in the settings file only when asked to remember it (never in a log, a command result or the
+  file); the endpoint, model and Thinking choice are saved settings, and **Copy chat** copies the
+  whole conversation. The browser build has a stub (no HTTP client, no place for a key). The panel
+  is limited to design and inspection tools on the file in front; the CLI gets every MCP tool.
 - **Missing:** Figma AI (first draft, rename layers, remove background, image generation and
-  editing, visual search, Make).
-- **Estimate:** 30–60 h with openly licensed local models. **Owner decision needed.**
+  editing, visual search, Make); a local-model option (the transport is one `ChatModel` trait away);
+  image understanding (the chat models read text, so screenshots come back as descriptions).
+- **Estimate:** 30–60 h for the rest, mostly local models and image editing. **Owner decision
+  needed.**
 
 ### 20. Mobile apps
 - **Missing:** Figma's iOS and Android apps view and comment on files and mirror prototypes.
@@ -615,6 +625,7 @@ No alpha blockers: the alpha gate in [`roadmap.md`](roadmap.md#alpha-gate) passe
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-24 | minor | Gap 19: the Assistant — `crates/ai` (a DeepSeek, OpenAI-compatible chat client with function calling and streaming, and the tool-calling loop) bridges the MCP tool definitions to the model's functions, so `figcraft-cli agent` (headless or `--attach`) and Help ▸ Assistant in the app edit a document through the commands every other agent uses. The key comes from `DEEPSEEK_API_KEY` or the panel's session-only field; the browser build has a stub. Image understanding, local models and Figma's image features stay missing. |
 | 2026-11-19 | minor | Gap 24: code blocks, first step (`board.codeBlock`, `board.setLanguage`; a block is as tall as its lines and keeps its text plain code, #2237); the toolbar entry, language menu, highlighting, line numbers and `.jam` import are missing. |
 | 2026-11-18 | minor | Gap 10: library analytics count insertions and detachments of styles and variables; modes stay on the missing list. |
 | 2026-11-18 | minor | Gap 6: the plugin directory works in the browser build, so that item leaves the missing list; what's installed there lasts as long as the page. Team libraries on a server work there too. |

@@ -233,9 +233,13 @@ figcraft-cli commands --filter autoLayout
 # Let an agent drive it over MCP (headless, or attached to the running app)
 figcraft-cli mcp
 figcraft-cli mcp --attach 47800
+
+# Or let DeepSeek design with the same tools (DEEPSEEK_API_KEY in the environment)
+figcraft-cli agent --prompt "Make a pricing card" --out out.figcraft
+figcraft-cli agent --attach 47800 --prompt "Tidy up the layers on this page"
 ```
 
-The desktop app also offers a loopback-only control channel (`figcraft --control <port>`) for inspecting UI state, driving tools with pointer and key events, and taking screenshots. See [`docs/control-protocol.md`](docs/control-protocol.md), [`docs/mcp.md`](docs/mcp.md) and [`docs/cli.md`](docs/cli.md).
+The desktop app also offers a loopback-only control channel (`figcraft --control <port>`) for inspecting UI state, driving tools with pointer and key events, and taking screenshots. **Help ▸ Assistant** is the same DeepSeek agent inside the app, editing the file in front. See [`docs/control-protocol.md`](docs/control-protocol.md), [`docs/mcp.md`](docs/mcp.md) and [`docs/cli.md`](docs/cli.md).
 
 ## Under the hood
 
@@ -261,6 +265,13 @@ cargo run --release -p figcraft-server     # the collaboration server (docs/serv
 cargo test --workspace                     # the test suite
 cargo xtask ci                             # fmt, clippy, tests, layering and asset checks
 ```
+
+**Working on the app:** `cargo xtask dev` builds it in the dev profile (optimised a little, thin
+debug info) and runs it, then rebuilds and restarts it every time a source file is saved: tens of
+seconds a change instead of the seven minutes a release build takes here. `cargo xtask dev --control
+7979 -- design.figcraft` hands the app its usual arguments, and `--release` loops on the release
+profile when timing matters. Watch the disk: a full debug and release `target/` is about 15 GB, and
+`cargo clean` (or deleting `target/debug/incremental`) is what gets it back.
 
 Fonts for the UI and the Text tool come from [craft-fonts](https://github.com/storytold/craft-fonts), cloned next to this repository (`../craft-fonts`); without it FigCraft falls back to your system fonts.
 

@@ -28,8 +28,10 @@ impl FigApp {
         let within = |w: f32, range: std::ops::RangeInclusive<f32>| if w.is_finite() { w.clamp(*range.start(), *range.end()) } else { PANEL_DEFAULT };
         let (left_width, right_width) = (within(left_width, LEFT_PANEL), within(right_width, RIGHT_PANEL));
         let pages_height = session.prefs.pages_height;
+        let mut assistant = crate::assistant::AssistantUi::default();
+        assistant.apply_prefs(&session.prefs);
         Self {
-            ui: UiState { left_width, right_width, pages_height, ..UiState::default() },
+            ui: UiState { left_width, right_width, pages_height, assistant, ..UiState::default() },
             session,
             canvas: canvas::CanvasState::default(),
             services,
@@ -349,6 +351,7 @@ impl FigApp {
                 .frame(egui::Frame::NONE.fill(t.panel).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
                     let label = match self.ui.left_tab {
+                        _ if self.ui.assistant.open => i18n::tr("Assistant"),
                         _ if self.ui.versions.open => i18n::tr("Version history"),
                         LeftTab::File => i18n::tr("Layers"),
                         LeftTab::Assets => i18n::tr("Assets"),

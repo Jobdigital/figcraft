@@ -36,6 +36,57 @@ node.create does; its own box goes at the layer's x/y, or with x/y given, at x +
 arcInner, booleanOperation (a boolean group's operation, or an operand's own; null: the group's), operandOperation (a layer in a boolean \
 group: how it combines with the operands below it; null: the group's), constrainProportions, description, interactions, overflow, pluginData {k: v}";
 
+/// Whether `name` is a key [`KEYS`] documents (a layer property `node.set` takes, so an agent that
+/// passed it at the top level of `node.create` meant it for `props`).
+pub fn is_property(name: &str) -> bool {
+    static NAMES: std::sync::OnceLock<std::collections::HashSet<&'static str>> = std::sync::OnceLock::new();
+    let names = NAMES.get_or_init(|| {
+        let mut set = std::collections::HashSet::new();
+        let bytes = KEYS.as_bytes();
+        let (mut depth, mut start, mut i) = (0usize, true, 0usize);
+        while i < bytes.len() {
+            let c = bytes[i] as char;
+            match c {
+                '(' => {
+                    depth += 1;
+                    i += 1;
+                }
+                ')' => {
+                    depth = depth.saturating_sub(1);
+                    i += 1;
+                }
+                _ if depth > 0 => i += 1,
+                ',' | '/' => {
+                    start = true;
+                    i += 1;
+                }
+                _ if start && c.is_ascii_alphabetic() => {
+                    let from = i;
+                    while i < bytes.len() && bytes[i].is_ascii_alphanumeric() {
+                        i += 1;
+                    }
+                    // A key is followed by `(`, `,`, `/` or the end; a word of the prose continues.
+                    let next = KEYS.get(i..).unwrap_or_default().trim_start().chars().next();
+                    if next.is_none_or(|n| matches!(n, '(' | ',' | '/'))
+                        && let Some(w) = KEYS.get(from..i)
+                    {
+                        set.insert(w);
+                    }
+                    start = false;
+                }
+                _ => {
+                    if !c.is_ascii_whitespace() {
+                        start = false;
+                    }
+                    i += 1;
+                }
+            }
+        }
+        set
+    });
+    names.contains(name)
+}
+
 /// CRLF, bare CR, U+2028 and U+2029 become LF, the only line ending text layout understands (editor insertion does the same).
 pub(crate) fn normalize_line_endings(s: &str) -> String {
     s.replace("\r\n", "\n").replace(['\r', '\u{2028}', '\u{2029}'], "\n")

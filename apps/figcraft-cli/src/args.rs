@@ -36,6 +36,12 @@ pub enum Command {
     Run(RunArgs),
     Commands(CommandsArgs),
     Mcp(McpArgs),
+    /// Ask DeepSeek to design with the same tools an MCP agent uses
+    ///
+    /// Reads DEEPSEEK_API_KEY (there is no --api-key: the key stays out of your shell history and
+    /// the process list) and DEEPSEEK_BASE_URL. Headless by default: a new document, or --in, saved
+    /// with --out. With --attach the running app makes the changes and nothing is saved here.
+    Agent(AgentArgs),
     /// Publish plugins to a server's plugin directory
     Plugin {
         #[command(subcommand)]
@@ -212,6 +218,64 @@ pub struct McpArgs {
     /// How long the attached app may take over each request, in seconds (1–600; default 60)
     #[arg(long, value_name = "SECONDS", requires = "attach", value_parser = clap::value_parser!(u64).range(1..=600))]
     pub timeout: Option<u64>,
+    #[command(flatten)]
+    pub roots: RootArgs,
+}
+
+/// Ask DeepSeek to design with the tools the MCP server exposes
+///
+/// The key comes from DEEPSEEK_API_KEY; the endpoint from DEEPSEEK_BASE_URL (or --base-url). The
+/// prompt comes from --prompt, --prompt-file, or standard input. Each tool call is printed on
+/// standard error as it happens; the answer goes to standard output. With --json every event is
+/// one JSON line instead. Headless changes are not saved unless --out names a file.
+#[derive(Args)]
+pub struct AgentArgs {
+    /// What to ask for (standard input when neither this nor --prompt-file is given)
+    #[arg(long, value_name = "TEXT", conflicts_with = "prompt_file")]
+    pub prompt: Option<String>,
+    /// Read the prompt from this file (`-` reads standard input)
+    #[arg(long, value_name = "FILE", conflicts_with = "prompt")]
+    pub prompt_file: Option<String>,
+    /// Open this file first (headless)
+    #[arg(long = "in", value_name = "FILE", conflicts_with = "attach")]
+    pub input: Option<String>,
+    /// Save the result here at the end (headless)
+    #[arg(long, value_name = "FILE", conflicts_with = "attach")]
+    pub out: Option<String>,
+    /// Attach to the app started with `figcraft --control PORT`; a bare port means 127.0.0.1:PORT.
+    /// Refuses the automation roots and the headless file flags
+    #[arg(
+        long,
+        value_name = "PORT",
+        value_parser = attach,
+        conflicts_with_all = ["automation_read_root", "automation_write_root", "input", "out"]
+    )]
+    pub attach: Option<String>,
+    /// The model: deepseek-flash (default) or deepseek-v4-pro
+    #[arg(long, value_name = "MODEL", default_value = figcraft_ai::DEFAULT_MODEL)]
+    pub model: String,
+    /// Another OpenAI-compatible endpoint (a local server or proxy)
+    #[arg(long, value_name = "URL")]
+    pub base_url: Option<String>,
+    /// Answer without thinking first (faster and cheaper; thinking is on by default)
+    #[arg(long)]
+    pub no_thinking: bool,
+    /// The most model turns before it stops (1–100)
+    #[arg(long, value_name = "N", default_value_t = 40, value_parser = clap::value_parser!(u64).range(1..=100))]
+    pub max_steps: u64,
+    /// What the Assistant may do: agent changes the file, ask only looks, plan writes the steps
+    #[arg(long, value_name = "MODE", default_value = "agent", value_parser = ["agent", "ask", "plan"])]
+    pub mode: String,
+    /// The most tokens one answer may use, thinking included (16–1,000,000); an endpoint with a
+    /// smaller limit lowers it to what it allows
+    #[arg(long, value_name = "N", default_value_t = u64::from(figcraft_engine::ASSISTANT_TOKENS_DEFAULT), value_parser = clap::value_parser!(u64).range(u64::from(figcraft_engine::ASSISTANT_TOKENS_MIN)..=u64::from(figcraft_engine::ASSISTANT_TOKENS_MAX)))]
+    pub max_tokens: u64,
+    /// Print one JSON event per line (tool calls, the answer) instead of text
+    #[arg(long)]
+    pub json: bool,
+    /// Wait for the whole answer instead of streaming it
+    #[arg(long)]
+    pub no_stream: bool,
     #[command(flatten)]
     pub roots: RootArgs,
 }
@@ -486,6 +550,55 @@ mod tests {
             panic!("connect")
         };
         assert_eq!((a.mappings.as_str(), a.dry_run), ("code/map.json", true));
+    }
+
+    #[test]
+    fn agent_args() {
+        let Command::Agent(a) = ok(&[
+            "agent",
+            "--prompt",
+            "make a card",
+            "--in",
+            "a.figcraft",
+            "--out",
+            "b.figcraft",
+            "--model",
+            "deepseek-v4-pro",
+            "--no-thinking",
+            "--max-steps",
+            "5",
+            "--json",
+            "--no-stream",
+            "--base-url",
+            "http://localhost:11434/v1",
+        ]) else {
+            panic!("agent")
+        };
+        assert_eq!(a.prompt.as_deref(), Some("make a card"));
+        assert_eq!((a.input.as_deref(), a.out.as_deref()), (Some("a.figcraft"), Some("b.figcraft")));
+        assert_eq!((a.model.as_str(), a.no_thinking, a.max_steps), ("deepseek-v4-pro", true, 5));
+        assert!(a.json && a.no_stream);
+        assert_eq!(a.base_url.as_deref(), Some("http://localhost:11434/v1"));
+        let Command::Agent(a) = ok(&["agent", "--prompt=-"]) else { panic!("agent") };
+        assert_eq!((a.model.as_str(), a.max_steps), (figcraft_ai::DEFAULT_MODEL, 40));
+        assert_eq!(a.max_tokens, u64::from(figcraft_engine::ASSISTANT_TOKENS_MAX), "the whole budget by default");
+        assert_eq!(a.mode, "agent", "the default mode changes the file");
+        let Command::Agent(a) = ok(&["agent", "--prompt=-", "--mode", "ask"]) else { panic!("agent") };
+        assert_eq!(a.mode, "ask");
+        let Command::Agent(a) = ok(&["agent", "--attach", "7979", "--prompt=-"]) else { panic!("agent") };
+        assert_eq!(a.attach.as_deref(), Some("127.0.0.1:7979"));
+        for bad in [
+            &["agent", "--attach", "7979", "--in", "a.figcraft", "--prompt=-"][..],
+            &["agent", "--attach", "7979", "--out", "b.figcraft", "--prompt=-"][..],
+            &["agent", "--prompt", "x", "--prompt-file", "p.txt"][..],
+            &["agent", "--prompt=-", "--max-steps", "0"][..],
+            &["agent", "--prompt=-", "--max-steps", "101"][..],
+            &["agent", "--prompt=-", "--max-tokens", "15"][..],
+            &["agent", "--prompt=-", "--max-tokens", "1000001"][..],
+            &["agent", "--prompt=-", "--mode", "everything"][..],
+        ] {
+            assert!(try_parse(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

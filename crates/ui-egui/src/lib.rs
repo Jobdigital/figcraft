@@ -15,6 +15,7 @@ pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
 };
 
 pub mod a11y;
+pub mod assistant;
 pub mod bidi;
 pub mod canvas;
 pub mod cjk;
@@ -49,6 +50,8 @@ mod theme_startup_tests;
 
 #[cfg(test)]
 mod a11y_tests;
+#[cfg(test)]
+mod assistant_tests;
 #[cfg(test)]
 mod async_dialog_tests;
 #[cfg(test)]
@@ -651,6 +654,8 @@ pub struct UiState {
     pub nav: a11y::Nav,
     /// The Manage plugins window is open.
     pub plugins_window: bool,
+    /// The Assistant (DeepSeek) panel: its conversation, settings and in-flight request.
+    pub assistant: assistant::AssistantUi,
     /// The Manage plugins window's tab, directory fields and pending install.
     pub plugins_manage: plugins_ui::PluginsWindow,
     /// A plugin command's parameters form, when open.
@@ -785,6 +790,7 @@ impl Default for UiState {
             libraries: false,
             nav: a11y::Nav::default(),
             plugins_window: false,
+            assistant: assistant::AssistantUi::default(),
             plugins_manage: plugins_ui::PluginsWindow::default(),
             plugin_form: None,
             live: live::LiveUi::default(),

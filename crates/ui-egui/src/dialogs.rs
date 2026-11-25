@@ -182,7 +182,8 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.export_preview
         || u.shortcuts_panel
         || u.preferences
-        || u.about;
+        || u.about
+        || u.assistant.open;
     if !open || !ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
         return;
     }
@@ -199,7 +200,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         u.close_tab = None;
         return;
     }
-    for flag in [&mut u.confirm_close, &mut u.export_preview, &mut u.shortcuts_panel, &mut u.preferences, &mut u.about] {
+    for flag in [&mut u.confirm_close, &mut u.export_preview, &mut u.shortcuts_panel, &mut u.preferences, &mut u.about, &mut u.assistant.open] {
         if std::mem::take(flag) {
             return;
         }
@@ -359,6 +360,7 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
         }
     }
     crate::shortcuts_panel::show(app, ctx);
+    crate::assistant::show(app, ctx);
     if let Some((mut find, mut replace)) = app.ui.find.clone() {
         let mut open = true;
         let mut action = None;

@@ -125,6 +125,7 @@ impl FigApp {
                     self.ui.about = true;
                     self.ui.about_tab = dialogs::AboutTab::About;
                 }
+                "panel.assistant" => crate::assistant::open(self),
                 "dialog.preferences" => self.ui.preferences = true,
                 "dialog.missingFonts" => missing_fonts::request(self),
                 "dialog.createFromColor" => crate::sampled_color::request(self, &r.data),

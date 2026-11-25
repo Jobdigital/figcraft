@@ -1346,7 +1346,10 @@ pub fn checkbox(ui: &mut Ui, on: bool, label: &str) -> bool {
 /// selection); returns whether it was clicked.
 pub fn checkbox_tri(ui: &mut Ui, state: Option<bool>, label: &str) -> bool {
     let t = Tokens::get(ui.ctx());
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width().min(200.0), FIELD_H), Sense::click());
+    // Wide enough for the label, so a click on its last word counts as a click on the box.
+    let text = ui.painter().layout_no_wrap(label.to_owned(), regular(11.0), t.text).size().x;
+    let width = (text + 30.0).max(200.0).min(ui.available_width());
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, FIELD_H), Sense::click());
     a11y::checkbox_tri(&resp, label, state);
     let rtl = rtl(ui);
     let b = flip_rect(rtl, rect, Rect::from_min_size(pos2(rect.min.x, rect.center().y - 7.0), vec2(14.0, 14.0)));

@@ -5,6 +5,12 @@ design with it: create and edit layers, run any menu command, inspect the result
 it as a PNG. It speaks newline-delimited JSON-RPC 2.0 over stdio (MCP protocol `2025-06-18`;
 `2025-03-26` and `2024-11-05` clients are accepted too).
 
+The same tools drive FigCraft's own Assistant, which talks to DeepSeek directly:
+`figcraft-cli agent` (headless or `--attach`) and the app's **Help ▸ Assistant** panel. They share
+the tool definitions, the system prompt (`figcraft_ai::system_prompt`) and the tool execution
+(`figcraft_ai::execute_tool`) with this server, so anything an MCP agent can do, the Assistant can
+do too — see [DeepSeek](#deepseek) below.
+
 Incoming lines are limited to **32 MiB before the newline**, including whitespace. The limit is
 enforced while reading: an oversized or unterminated frame stops at the first excess byte, returns
 JSON-RPC error `-32600` (`message too large`, null id), and closes the stdio session without reading
@@ -2205,6 +2211,99 @@ A name a tool or command doesn't take (`run_command {args}` for `params`, a step
 
 Each returns a step-by-step plan naming the exact tools and commands to use and how to verify.
 
+## DeepSeek
+
+FigCraft brings its own model connection as well, so it needs no external MCP client:
+
+| Where | What it does |
+|---|---|
+| **Assistant**, in the left sidebar (the rail's sparkle button, or Help ▸ Assistant) (desktop app) | A panel that chats with DeepSeek and edits the file you have open. It runs the design and inspection tools only (`create_node`, `run_command`, `batch`, `inspect_document`, `get_node`, `screenshot`, `export`, `undo`, `redo`, …): opening, saving or closing files, preferences, windows, online sharing, plugins and simulated input are refused, with a reason the model reads. Its commands run as `DeepSeek`, so its comments are signed "DeepSeek (agent)" and its presence shows on the canvas. |
+| `figcraft-cli agent --prompt "…"` | Headless (a new document, or `--in FILE`) or `--attach PORT`; `--out FILE` saves the result. Every tool the MCP server exposes is available. |
+
+Both read the key from **`DEEPSEEK_API_KEY`** (there is no `--api-key`, so it stays out of the
+shell history and the process list). The panel also takes a key typed in its Settings: tick
+**Remember this key on this computer** and it is kept in FigCraft's settings file, so the panel
+opens with it after a restart; leave it unticked and the key lives in memory for that run only.
+The tick itself is saved, so it comes back the way you left it even before a key is typed.
+`pref.assistant {key?, remember?, endpoint?, model?, thinking?}` sets the same things from a
+command and returns `{endpoint, model, thinking, remember, keySaved}`; `key` is only taken with
+`remember: true`, and `remember: false` forgets the key.
+The key is never put in the file's own data, a log, a command result or an error, and the settings
+file is written private (0600 where the platform has file modes) — but anyone who can read that
+file can read the key. `DEEPSEEK_BASE_URL` (or `--base-url`, or the panel's Endpoint field, which is
+saved when set) points either at another OpenAI-compatible endpoint (a proxy, a local server) with
+`/chat/completions` appended; leave it empty for `https://api.deepseek.com`. The model and Thinking
+choices are saved too.
+
+The Assistant is a view of the left sidebar, like a chat view docked beside an editor's file tree:
+the rail's sparkle button opens it (widening the sidebar to 320 pt when it is narrower), the panel's
+Close button or another sidebar view hides it, and its conversation keeps running and comes back as
+it was. The sidebar's drag handle sets its width.
+
+The panel has **Add selection**: it attaches `#selection` to the prompt, and each prompt is sent
+with the data of every `#reference` it names, read from the file as it is at that moment:
+
+| Reference | What it brings |
+|---|---|
+| `#selection` | The layers selected on the canvas, with their ids |
+| `#page` | The page shown and its top-level layers |
+| `#file` | The file's name, pages, layers, styles, variables and images |
+| `#styles` | The local styles, by kind |
+| `#variables` | The local variables, by collection |
+| `#components` | The file's main components |
+
+Typing `#` opens the reference picker and typing `/` the task picker (in Agent mode): `a11y`,
+`responsive` and `cleanup` fill the composer with a prepared prompt and its reference, which you
+can edit before sending. What you typed stays in the thread; the reference data goes to the model.
+**Copy chat** copies the whole conversation as Markdown (prompts, answers, reasoning, every tool
+call with its arguments and result) for a message or an issue. **New chat** starts over and keeps
+the settings.
+
+The panel's agent picker chooses what the Assistant may do with a prompt:
+
+| Mode | What it may do |
+|---|---|
+| **Agent** | Change the file: the design tools, `run_command` and `batch` |
+| **Ask** | Only look: no tool that edits is offered, and the rules say never to claim a change |
+| **Plan** | Only look, and answer with a numbered plan naming the exact commands |
+
+Taking the tools away is what makes "change nothing" true rather than a request the model could
+ignore. Switching mode mid-thread keeps the messages: the next request carries the new rules and
+tools. The mode is saved as `assistant_agent` and set with `pref.assistant {agent: agent|ask|plan}`;
+that reaches a panel that is already open. `figcraft-cli agent --mode ask` does the same headless.
+
+An answer that stops short — the model called no tool and said nothing, or it ran out of output
+tokens mid-plan — is not treated as a finished turn: the Assistant nudges it to carry on, twice,
+and then says so instead of leaving the file untouched without a word. Asking again with
+"continue" is always allowed.
+
+```sh
+DEEPSEEK_API_KEY=sk-… figcraft-cli agent --prompt "Make a pricing card, then check it" --out out.figcraft
+# Drive the running app instead (start it with: figcraft --control 7979)
+figcraft-cli agent --attach 7979 --prompt "Tidy up the layers on this page"
+```
+
+Models are `deepseek-flash` (the default) and `deepseek-v4-pro`. Thinking is on unless
+`--no-thinking` is passed; the panel has a Thinking checkbox. `--max-steps N` (1–100, default 40)
+bounds the model's turns, and `--max-tokens N` (16–1,000,000, default 1,000,000: the whole range, so the app never cuts an answer short) the answer budget;
+the panel's Settings has the same budget, which `pref.assistant {maxTokens}` also sets. Thinking
+counts toward it, so a long plan leaves room for the answer instead of using it all up. When the
+model still runs out, the run nudges it and fails after the second time rather than looping.
+An endpoint with a smaller limit than the budget says so in its refusal
+(`the valid range of max_tokens is [1, 393216]`): the app and the CLI lower the budget to what it
+takes, tell you, and ask again, instead of stopping on an error you can't act on.
+Streamed text goes to standard output, each tool call to standard error;
+`--json` prints one JSON event per line (`{"type":"tool"|"done"|"stopped"|"incomplete"|"note"|"saved", …}`)
+instead.
+
+What leaves the machine: the system prompt, your prompts, and every tool result — the inspected
+document, node properties and rendered image details. Screenshots are described to the model rather
+than sent (the chat models read text), so check the design with `inspect_document` or `get_node`.
+Do not use the Assistant on a document you may not send to DeepSeek.
+
+The browser build has no HTTP client and can't keep a key secret, so there the panel says the
+Assistant needs the desktop app or the CLI.
+
 ## Examples
 
 Create a card with auto layout and check it:
@@ -2275,7 +2374,7 @@ A step in a `batch` can use what an earlier step returned. Give the step a name 
 `command` and `params`), and `{"$ref": "name"}` anywhere in a later step's params (a value, an item
 in `ids`, a nested field) is replaced by the `id` in that step's result before the later step runs.
 This builds a nested tree in one call and one undo step, without guessing ids or counting steps:
-
+****
 ```json
 {"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"batch","arguments":{"label":"Card","commands":[
   {"command":"node.create","as":"card","params":{"type":"frame","name":"Card","props":{"layout":"vertical","gap":12}}},

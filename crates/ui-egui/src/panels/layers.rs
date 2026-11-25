@@ -106,7 +106,7 @@ pub fn rail(app: &mut FigApp, ui: &mut Ui) {
         let ir = Rect::from_center_size(pos2(r.center().x, y + 18.0), vec2(40.0, 36.0));
         let hit = Rect::from_min_max(pos2(r.min.x, y), pos2(r.max.x, y + 56.0));
         let resp = ui.interact(hit, ui.scope_id().with(("rail", label)), Sense::click()).tip(label);
-        let active = tab.is_some_and(|tb| tb == app.ui.left_tab && !app.ui.left_collapsed && !app.ui.versions.open);
+        let active = tab.is_some_and(|tb| tb == app.ui.left_tab && !app.ui.left_collapsed && !app.ui.versions.open && !app.ui.assistant.open);
         if tab.is_some() {
             a11y::tab(&resp, label, active);
         }
@@ -121,7 +121,9 @@ pub fn rail(app: &mut FigApp, ui: &mut Ui) {
         if resp.clicked() {
             match tab {
                 Some(tb) => {
-                    // Leaving the version history shows the tab rather than collapsing it.
+                    // Another view takes the sidebar: the Assistant hides (its conversation stays)
+                    // and the tab shows rather than collapsing the panel.
+                    app.ui.assistant.open = false;
                     if active {
                         app.ui.close_left_panel();
                     } else {
@@ -137,11 +139,45 @@ pub fn rail(app: &mut FigApp, ui: &mut Ui) {
         }
         y += 68.0;
     }
+    // The Assistant: opens its panel, and shows as chosen while it is open.
+    let label = tr("Assistant");
+    let ir = Rect::from_center_size(pos2(r.center().x, y + 18.0), vec2(40.0, 36.0));
+    let hit = Rect::from_min_max(pos2(r.min.x, y), pos2(r.max.x, y + 56.0));
+    let resp = ui.interact(hit, ui.scope_id().with(("rail", label)), Sense::click()).tip(label);
+    a11y::toggle(&resp, label, app.ui.assistant.open);
+    if app.ui.assistant.open {
+        ui.painter().rect_filled(ir, CornerRadius::same(6), t.selected_row);
+    } else if resp.hovered() {
+        ui.painter().rect_filled(ir, CornerRadius::same(6), t.hover);
+    }
+    icons::paint(
+        ui.painter(),
+        Rect::from_center_size(ir.center(), Vec2::splat(RAIL_ICON)),
+        Icon::Assistant,
+        if app.ui.assistant.open { t.accent_text } else { t.icon },
+    );
+    let shown = crate::widgets::elide_font(ui, label, (r.width() - 6.0).max(0.0), regular(10.0));
+    ui.painter().text(pos2(r.center().x, y + 46.0), Align2::CENTER_CENTER, shown, regular(10.0), t.text);
+    if resp.clicked() {
+        // Open when hidden; when it is the view showing, the button closes it, and a collapsed
+        // sidebar opens again rather than closing a view nobody can see.
+        if app.ui.assistant.open && !app.ui.left_collapsed {
+            app.ui.assistant.open = false;
+        } else {
+            crate::assistant::open(app);
+        }
+    }
 }
 
 /// Draw the left panel: versions when open, otherwise the file/Assets header with in-place
 /// file rename and collapse control, followed by Pages and Layers or the Assets panel.
 pub fn left_panel(app: &mut FigApp, ui: &mut Ui) {
+    // The Assistant is one of the sidebar's views, the way a chat view docks beside an editor's
+    // file tree: it fills the panel, with its own title row.
+    if app.ui.assistant.open {
+        crate::assistant::view(app, ui);
+        return;
+    }
     if app.ui.versions.open {
         crate::versions::panel(app, ui);
         return;

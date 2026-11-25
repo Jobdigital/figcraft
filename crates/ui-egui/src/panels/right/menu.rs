@@ -53,6 +53,18 @@ pub fn context_popup(resp: &egui::Response) -> egui::Popup<'static> {
     egui::Popup::context_menu(resp).width(MENU_MIN_W).style(menu_style)
 }
 
+/// A list opened by typing rather than by a click (the Assistant's `#reference` and `/task`
+/// pickers): open while its anchor is, styled like a menu. It opens over the conversation above
+/// the composer, the way a chat client's picker does, and drops below when there is no room.
+pub fn typing_popup(anchor: &egui::Response) -> egui::Popup<'static> {
+    egui::Popup::from_response(anchor)
+        .open(true)
+        .width(anchor.rect.width().max(MENU_MIN_W))
+        .align(egui::RectAlign::TOP_START)
+        .align_alternatives(&[egui::RectAlign::BOTTOM_START])
+        .style(menu_style)
+}
+
 /// A context menu for a property row: a secondary click anywhere over `rect` opens it, even over
 /// the row's fields (which would otherwise take the click), like the incumbent's row menus.
 pub(super) fn row_context_menu(ui: &Ui, rect: Rect, id: Id) -> egui::Popup<'static> {

@@ -51,6 +51,7 @@ fn completions_name_the_cli_its_subcommands_and_options() -> std::io::Result<()>
             "run",
             "commands",
             "mcp",
+            "agent",
             "plugin",
             "perf",
             "publish",
@@ -98,6 +99,7 @@ fn man_pages_cover_every_subcommand_without_synthetic_help_pages() -> std::io::R
     assert_eq!(
         pages,
         [
+            "figcraft-cli-agent.1",
             "figcraft-cli-commands.1",
             "figcraft-cli-connect-publish.1",
             "figcraft-cli-connect.1",
@@ -125,6 +127,7 @@ fn man_pages_cover_every_subcommand_without_synthetic_help_pages() -> std::io::R
         ("figcraft-cli-export.1", "--automation-read-root"),
         ("figcraft-cli-plugin-publish.1", "--server"),
         ("figcraft-cli-connect-publish.1", "--dry-run"),
+        ("figcraft-cli-agent.1", "--max-steps"),
     ] {
         let text = fs::read_to_string(dir.join(page))?.replace("\\-", "-");
         assert!(text.contains(option), "{page} does not contain {option}");
@@ -145,7 +148,7 @@ fn generation_creates_the_output_directory_and_can_run_again() -> std::io::Resul
     fs::write(&page, "old page")?;
     generator::generate(&output)?;
     assert_eq!(fs::read(page)?, first);
-    assert_eq!(fs::read_dir(output)?.count(), 18);
+    assert_eq!(fs::read_dir(output)?.count(), 19);
     Ok(())
 }
 

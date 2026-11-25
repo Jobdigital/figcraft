@@ -18,7 +18,7 @@
 //! context again (a nested call deadlocks; debug builds panic after 10 s): read what they need
 //! first, as everything here does (`a11y_tests` runs every path with the tree on).
 
-use egui::accesskit::{self, Role, Toggled};
+use egui::accesskit::{self, Live, Role, Toggled};
 use egui::{Context, CornerRadius, Event, FocusDirection, Id, Key, LayerId, Modifiers, Order, Pos2, Rect, Response, Stroke, StrokeKind, Ui};
 use figcraft_engine::keymap;
 
@@ -871,6 +871,15 @@ pub fn status(resp: &Response, label: &str, description: &str) {
     node(resp, label, |n| {
         n.set_role(Role::Status);
         n.set_description(description);
+    });
+}
+
+/// A status announced when it changes (a live region): what the Assistant is doing, an error.
+pub fn live_status(resp: &Response, label: &str, description: &str) {
+    node(resp, label, |n| {
+        n.set_role(Role::Status);
+        n.set_description(description);
+        n.set_live(Live::Polite);
     });
 }
 

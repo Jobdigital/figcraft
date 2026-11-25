@@ -2154,12 +2154,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "figcraft-ai"
+version = "0.18.1"
+dependencies = [
+ "figcraft-mcp",
+ "log",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
 name = "figcraft-cli"
 version = "0.18.1"
 dependencies = [
  "clap",
  "clap_complete",
  "clap_mangen",
+ "figcraft-ai",
  "figcraft-doc",
  "figcraft-engine",
  "figcraft-format",
@@ -2458,6 +2470,7 @@ dependencies = [
  "craft-update",
  "egui",
  "egui_extras",
+ "figcraft-ai",
  "figcraft-color",
  "figcraft-doc",
  "figcraft-engine",

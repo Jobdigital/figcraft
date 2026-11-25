@@ -173,17 +173,31 @@ fn doc_needs_params(doc: &'static str) -> bool {
 
 /// Refuse params naming something the command doesn't take: a misspelt name would otherwise be
 /// ignored and the command answer as if it hadn't been given. `ids` and `id` are always taken:
-/// the layers a command acts on (`params::targets` reads either).
+/// the layers a command acts on (`params::targets` reads either). A layer property passed at the
+/// top level of a command that takes `props` says where it belongs.
 pub fn refuse_unknown_params(id: &str, params: &Value) -> Result<()> {
     let (Some(names), Some(given)) = (param_names(id), params.as_object()) else { return Ok(()) };
     let taken = |k: &str| matches!(k, "ids" | "id") || names.contains(&k);
-    let unknown: Vec<String> = given.keys().filter(|k| !taken(k)).map(|k| format!("`{k}`")).collect();
+    let unknown: Vec<&String> = given.keys().filter(|k| !taken(k)).collect();
     if unknown.is_empty() {
         return Ok(());
     }
     let s = if unknown.len() == 1 { "" } else { "s" };
     let takes = if names.is_empty() { "none".to_string() } else { names.join(", ") };
-    Err(crate::bad(id, format!("unknown parameter{s} {} (it takes {takes})", unknown.join(", "))))
+    let listed: Vec<String> = unknown.iter().map(|k| format!("`{k}`")).collect();
+    let hint = misplaced_properties(names, &unknown)
+        .map(|props| format!(": {} belong{} inside `props`", props.join(", "), if props.len() == 1 { "s" } else { "" }));
+    Err(crate::bad(id, format!("unknown parameter{s} {} (it takes {takes}){}", listed.join(", "), hint.unwrap_or_default())))
+}
+
+/// The top-level parameters that are layer properties, for a command that takes `props`:
+/// `node.create {layout: "vertical"}` means `props: {layout: "vertical"}`.
+fn misplaced_properties(names: &[&str], unknown: &[&String]) -> Option<Vec<String>> {
+    if !names.contains(&"props") {
+        return None;
+    }
+    let props: Vec<String> = unknown.iter().filter(|k| crate::cmd::props::is_property(k)).map(|k| format!("`{k}`")).collect();
+    (!props.is_empty()).then_some(props)
 }
 
 /// The top-level items of a `{…}` params doc (`{ids?, direction? (horizontal|vertical)}` →

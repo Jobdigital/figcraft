@@ -50,6 +50,8 @@ icons! {
     TextOnPath,
     Comment,
     Actions,
+    /// The Assistant: a sparkle, drawn for the AI panel and its rail button.
+    Assistant,
     Chevron,
     ChevronRight,
     ChevronLeft,

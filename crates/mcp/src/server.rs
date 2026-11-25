@@ -37,6 +37,10 @@ positioned by the layout (set layout, gap, padding, mainAlign, crossAlign, sizin
 Every menu item, panel action and shortcut is a command: find ids and params with list_commands (use a filter) \
 and run them with run_command, or several as one undo step with batch. Commands act on `ids` when given, else \
 on the selection; new layers become the selection. Colours are \"#RRGGBB\" or \"#RRGGBBAA\". \
+Layer properties (fill, fills, stroke, layout, gap, padding, mainAlign, crossAlign, sizingH, sizingV, cornerRadius, \
+characters, fontSize, …) go inside `props` on node.create, frame.create and shape.*, never at the top level, and inside \
+`props` on node.set (list_commands with filter \"node.set\" documents every key). sizingH/V \"fill\" needs an auto layout \
+parent: use \"fixed\" or \"hug\" elsewhere. Tool arguments must be valid JSON. \
 Repeated UI (buttons, inputs, cards, list rows, tab bars, icons) is a component: build it once, make it one with \
 component.create (or create_node type component), then place every other copy with \
 instance.create {component, parent?, x?, y?} instead of duplicating layers, so every copy follows its main component. \
@@ -67,9 +71,22 @@ pub struct Server {
 }
 
 /// The backend as the MCP client's AI agent: `engine.execute` carries its name (`agent`).
-struct AsAgent<'a> {
+/// A backend as an AI agent named `agent`: every `engine.execute` carries the name, so comments
+/// are signed with it and the app shows where it works. The MCP server wraps its client this way;
+/// `figcraft-cli agent` and the app's Assistant use it directly.
+pub struct AsAgent<'a> {
     inner: &'a mut dyn Backend,
     agent: &'a str,
+}
+
+impl<'a> AsAgent<'a> {
+    pub fn new(inner: &'a mut dyn Backend, agent: &'a str) -> Self {
+        Self { inner, agent }
+    }
+
+    pub fn agent(&self) -> &str {
+        self.agent
+    }
 }
 
 impl Backend for AsAgent<'_> {

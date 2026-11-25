@@ -117,6 +117,29 @@ pub struct Prefs {
     /// `widget:<plugin>`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub recent_actions: Vec<String>,
+    /// The Assistant's settings: the endpoint of an OpenAI-compatible API (empty: DeepSeek's) and
+    /// the model name (empty: the app's default). Both are ordinary settings.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub assistant_endpoint: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub assistant_model: String,
+    /// The Assistant thinks before answering unless this is off.
+    pub assistant_thinking: bool,
+    /// The Assistant's mode (`ASSISTANT_MODES`; empty: the app's default, Agent). It decides what
+    /// the model may do: change the file, only look, or plan.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub assistant_agent: String,
+    /// The most tokens one answer may have (thinking counts toward it), 16 to 1,000,000. It is a
+    /// budget, not a promise: the model stops when it has finished.
+    pub assistant_max_tokens: u32,
+    /// The DeepSeek (or other endpoint's) API key, saved only when the user asks the Assistant to
+    /// remember it: a secret, never logged or returned by a command. The settings file is written
+    /// private (0600 where the platform has modes); anyone who can read it can read the key.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub assistant_key: String,
+    /// Whether the user asked to keep the key on this computer: whether the question starts
+    /// ticked, kept even while no key is saved yet, so the answer survives a restart.
+    pub assistant_remember: bool,
     /// The team libraries you added (`library.add`) or checked (`library.check`), as hashes of
     /// their links (which carry tokens), newest first, at most
     /// [`MAX_TEAM_LIBRARIES`](crate::library_server::MAX_TEAM_LIBRARIES): only these are checked
@@ -164,6 +187,13 @@ impl Default for Prefs {
             view: BTreeMap::new(),
             board_grid: Default::default(),
             recent_actions: Vec::new(),
+            assistant_endpoint: String::new(),
+            assistant_model: String::new(),
+            assistant_thinking: true,
+            assistant_agent: String::new(),
+            assistant_max_tokens: crate::ASSISTANT_TOKENS_DEFAULT,
+            assistant_key: String::new(),
+            assistant_remember: false,
             team_libraries: Vec::new(),
         }
     }

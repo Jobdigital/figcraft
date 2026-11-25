@@ -26,6 +26,19 @@ fn a_misspelt_parameter_is_refused_and_named() {
     assert!(e.contains("unknown parameters `steps`, `stepz` (it takes none)"), "{e}");
 }
 
+/// A layer property passed at the top level of a command that takes `props`: the error says where
+/// it belongs, so an agent's first `node.create {layout: …}` doesn't loop.
+#[test]
+fn a_layer_property_at_the_top_level_points_at_props() {
+    let mut s = Session::new();
+    let e = err(&mut s, "node.create", json!({"type": "frame", "width": 100, "height": 100, "layout": "vertical", "fill": "#FFFFFF"}));
+    assert!(e.contains("unknown parameters `fill`, `layout`"), "{e}");
+    assert!(e.contains("`fill`, `layout` belong inside `props`"), "{e}");
+    // A misspelt name stays a misspelling: no `props` advice.
+    let e = err(&mut s, "node.create", json!({"type": "frame", "nam": "x"}));
+    assert!(e.contains("unknown parameter `nam`") && !e.contains("inside `props`"), "{e}");
+}
+
 /// `ids` and `id` name the layers a command acts on, documented or not (`params::targets` reads
 /// either), so `{id}` keeps working where a doc only says `ids?`.
 #[test]

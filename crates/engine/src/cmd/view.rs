@@ -545,6 +545,89 @@ pub fn specs() -> Vec<CommandSpec> {
             }
         ),
         spec!("app.preferences", "Preferences", "{}", false, |s, _| ui(s, "dialog.preferences")),
+        spec!("app.assistant", "Assistant", "{}", false, |s, _| ui(s, "panel.assistant")),
+        spec!(
+            "pref.assistant",
+            "Assistant settings",
+            "{key? (kept only with remember: true), remember? (store the key on this computer; false forgets it), endpoint? (an OpenAI-compatible base URL; empty: DeepSeek's), model?, thinking? (default true), agent? (agent|ask|plan: change the file, only look, or plan it), maxTokens? (16 to 1,000,000; thinking counts toward it)}  → {endpoint, model, thinking, agent, maxTokens, remember, keySaved}",
+            false,
+            |s, p| {
+                if let Some(endpoint) = string(p, "endpoint") {
+                    let e = endpoint.trim();
+                    if !e.is_empty() && !(e.starts_with("http://") || e.starts_with("https://")) {
+                        return Err(bad("pref.assistant", "`endpoint` must be an http:// or https:// URL (empty: DeepSeek's)"));
+                    }
+                    if e.chars().count() > 2000 || e.chars().any(|c| c.is_control() || c.is_whitespace()) {
+                        return Err(bad("pref.assistant", "`endpoint` must be one URL, at most 2,000 characters"));
+                    }
+                    s.prefs.assistant_endpoint = e.to_string();
+                }
+                if let Some(model) = string(p, "model") {
+                    let m = model.trim();
+                    if m.is_empty() || m.len() > 100 || !m.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '/')) {
+                        return Err(bad("pref.assistant", "`model` must be a model name (letters, digits, - _ . : /), at most 100 characters"));
+                    }
+                    s.prefs.assistant_model = m.to_string();
+                }
+                if let Some(thinking) = boolean(p, "thinking") {
+                    s.prefs.assistant_thinking = thinking;
+                }
+                if let Some(agent) = string(p, "agent") {
+                    let id = agent.trim().to_ascii_lowercase();
+                    if !crate::ASSISTANT_MODES.contains(&id.as_str()) {
+                        return Err(bad(
+                            "pref.assistant",
+                            format!("`agent` must be one of {} (empty: the default)", crate::ASSISTANT_MODES.join(", ")),
+                        ));
+                    }
+                    s.prefs.assistant_agent = id;
+                }
+                if let Some(tokens) = p.get("maxTokens").filter(|v| !v.is_null()) {
+                    let n = tokens.as_f64().filter(|n| n.fract() == 0.0).map(|n| n as i64);
+                    let (min, max) = (crate::ASSISTANT_TOKENS_MIN, crate::ASSISTANT_TOKENS_MAX);
+                    match n {
+                        Some(n) if (i64::from(min)..=i64::from(max)).contains(&n) => s.prefs.assistant_max_tokens = n as u32,
+                        _ => {
+                            return Err(bad(
+                                "pref.assistant",
+                                format!("`maxTokens` must be a whole number of tokens from {min} to {max} (thinking counts toward it)"),
+                            ));
+                        }
+                    }
+                }
+                match (p.get("key"), boolean(p, "remember")) {
+                    // Keeping the key: an empty one forgets it, and the answer stays ticked so it
+                    // is asked again the same way after a restart.
+                    (Some(key), Some(true)) => {
+                        s.prefs.assistant_remember = true;
+                        s.prefs.assistant_key = key.as_str().unwrap_or_default().trim().to_string();
+                    }
+                    // Asking to keep a key that is typed later: remember the answer, not a key.
+                    (None, Some(true)) => s.prefs.assistant_remember = true,
+                    // Forgetting it.
+                    (_, Some(false)) => {
+                        s.prefs.assistant_remember = false;
+                        s.prefs.assistant_key.clear();
+                    }
+                    (Some(_), None) => {
+                        return Err(bad("pref.assistant", "`key` is kept only with `remember: true`; pass `remember: false` to forget it"));
+                    }
+                    (None, None) => {}
+                }
+                // The key must reach the settings file now, not only when the app quits: a crash or
+                // a killed window would lose it, and the user asked for it to be kept.
+                s.prefs_unsaved = true;
+                Ok(json!({
+                    "endpoint": s.prefs.assistant_endpoint,
+                    "model": s.prefs.assistant_model,
+                    "thinking": s.prefs.assistant_thinking,
+                    "agent": if s.prefs.assistant_agent.is_empty() { "agent" } else { &s.prefs.assistant_agent },
+                    "maxTokens": s.prefs.assistant_max_tokens,
+                    "remember": s.prefs.assistant_remember,
+                    "keySaved": !s.prefs.assistant_key.is_empty(),
+                }))
+            }
+        ),
         spec!("app.actions", "Actions", "{}", false, |s, _| ui(s, "palette.actions")),
         spec!("help.shortcuts", "Keyboard shortcuts", "{}", false, |s, _| ui(s, "panel.shortcuts")),
         spec!("help.about", "About FigCraft", "{}", false, |s, _| ui(s, "dialog.about")),

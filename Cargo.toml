@@ -32,6 +32,7 @@ figcraft-format = { path = "crates/format" }
 figcraft-tools = { path = "crates/tools" }
 figcraft-collab = { path = "crates/collab" }
 figcraft-engine = { path = "crates/engine" }
+figcraft-ai = { path = "crates/ai" }
 figcraft-ui-egui = { path = "crates/ui-egui" }
 figcraft-mcp = { path = "crates/mcp" }
 figcraft-collab-net = { path = "crates/collab-net" }
@@ -88,6 +89,9 @@ chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 proptest = "1"
 imbl = { version = "7", features = ["serde"] }
 postcard = { version = "1", default-features = false, features = ["alloc"] }
+# The Assistant's DeepSeek client (crates/ai, native only): a blocking HTTPS client with rustls.
+# Already in the lock through craft-font-store and craft-update; MIT OR Apache-2.0.
+ureq = "3.5"
 
 # rendering / formats
 tiny-skia = "0.12"

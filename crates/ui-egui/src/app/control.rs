@@ -105,6 +105,19 @@ impl FigApp {
         });
         state["homeSearch"] = json!(self.ui.home_view.file_query);
         state["panels"]["minimized"] = json!(self.session.ds().is_ok_and(|d| d.view.ui_minimized));
+        // The Assistant's own state: what automation (and a test) can see of the panel. The key is
+        // never reported, only whether one is saved.
+        state["assistant"] = json!({
+            "open": self.ui.assistant.open,
+            "mode": self.ui.assistant.mode.id(),
+            "model": self.ui.assistant.model,
+            "thinking": self.ui.assistant.thinking,
+            "endpoint": self.ui.assistant.endpoint,
+            "keySaved": !self.session.prefs.assistant_key.is_empty(),
+            "busy": self.ui.assistant.busy(),
+            "entries": self.ui.assistant.entries.len(),
+            "references": self.ui.assistant.references().iter().map(|r| r.id()).collect::<Vec<_>>(),
+        });
         // Set apart from the literal above, which is at the macro recursion limit.
         state["uiScale"] = json!({"choice": self.session.prefs.ui_scale, "zoom": self.ui.ui_scale.zoom, "drawn": self.ui.ui_scale.drawn, "limited": self.ui.ui_scale.limited});
         state["pendingOpens"] = json!(self.ui.pending_opens.len());

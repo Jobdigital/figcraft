@@ -288,6 +288,36 @@ live sessions (`collab.*`: without a key on a server open to the public, with `c
 `collab.manageFile` for the owner token and `collab.report`) and use plugin directories
 (`plugin.directory.*`); the one-shot `run` can't (no network link).
 
+### `agent [--prompt TEXT | --prompt-file FILE] [--in FILE] [--out FILE] [--attach PORT] [--model M] [--base-url URL] [--no-thinking] [--max-steps N] [--max-tokens N] [--mode agent|ask|plan] [--json] [--no-stream] [--automation-read-root DIR]… [--automation-write-root DIR]…`
+
+Ask DeepSeek to design with the same tools the MCP server exposes. The key comes from
+`DEEPSEEK_API_KEY` only (there is no `--api-key`, so it stays out of the shell history and the
+process list), the endpoint from `--base-url` or `DEEPSEEK_BASE_URL` (empty: DeepSeek's). The prompt
+comes from `--prompt`, `--prompt-file` (`-` is standard input) or standard input.
+
+Headless by default: a new document, or `--in FILE`; `--out FILE` saves the result. With
+`--attach PORT` the running app makes the changes (`figcraft --control PORT`) and nothing is saved
+here; the automation roots are refused then, because only the app's own roots confine it.
+
+`--model` is `deepseek-flash` (the default) or `deepseek-v4-pro`. Thinking is on unless
+`--no-thinking`. `--max-steps N` (1–100, default 40) bounds the model's turns and `--max-tokens N`
+(16–1,000,000, default 1,000,000: the whole range, so the app never cuts an answer short) the
+answer budget, thinking included. `--mode` picks what it may do, as the panel's agent picker does:
+`agent` (the default) changes the file, `ask` only looks with no editing tool offered, and `plan`
+answers with a numbered plan; the tools it may call follow the mode. An endpoint with a smaller
+limit says so in its refusal and the run lowers the budget to what it takes, prints a `note` and
+asks again. Streamed text goes to standard output and each tool call to standard error; `--json`
+prints one JSON event per line instead (`tool`, `note`, `done`, `stopped`, `incomplete`, `saved`),
+and `--no-stream` waits for the whole answer. An answer that stops short — no tool call and no
+text, or out of output tokens — is nudged to carry on, twice, and then the run fails with why. Its
+commands run as "DeepSeek", so comments it makes are signed "DeepSeek (agent)".
+See [mcp.md › DeepSeek](mcp.md#deepseek).
+
+```sh
+DEEPSEEK_API_KEY=sk-… figcraft-cli agent --prompt "Make a pricing card" --out out.figcraft
+figcraft-cli agent --attach 7979 --prompt "Tidy up the layers on this page"
+```
+
 ### `plugin publish <folder> --server ws://host:port/[?key=KEY]`
 
 Publishes a plugin folder (`figcraft-plugin.json`, the module its `main` names, an optional `assets/`

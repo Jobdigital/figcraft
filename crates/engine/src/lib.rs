@@ -116,6 +116,18 @@ pub use prefs::{Clipboard, DefaultProps, MAX_RECENT_ACTIONS, Prefs, UI_SCALE_MAX
 pub use session::Forward;
 pub use view_state::ViewState;
 
+/// The Assistant's answer budget (`pref.assistant {maxTokens}`): the top of the range by default,
+/// so nothing the app can set is ever cut short by the app; a budget is a ceiling, not a target,
+/// and the model stops when it has finished. An endpoint with a smaller limit lowers it to what it
+/// allows (DeepSeek's own is 393,216).
+pub const ASSISTANT_TOKENS_DEFAULT: u32 = ASSISTANT_TOKENS_MAX;
+pub const ASSISTANT_TOKENS_MIN: u32 = 16;
+pub const ASSISTANT_TOKENS_MAX: u32 = 1_000_000;
+
+/// The Assistant's modes (`pref.assistant {agent}`), the same ids `figcraft_ai::Mode` uses: do the
+/// work, only look, or plan it. Kept here as strings because the engine sits below the AI crate.
+pub const ASSISTANT_MODES: &[&str] = &["agent", "ask", "plan"];
+
 /// The editing session: open documents, the current tool, clipboard and prefs.
 pub struct Session {
     pub docs: Vec<DocState>,
@@ -194,6 +206,8 @@ mod annotations_tests;
 mod arc_fields_tests;
 #[cfg(test)]
 mod arc_handles_tests;
+#[cfg(test)]
+mod assistant_pref_tests;
 #[cfg(test)]
 mod auto_layout_move_tests;
 #[cfg(test)]
