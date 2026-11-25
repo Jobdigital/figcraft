@@ -197,3 +197,31 @@ fn a_budget_the_endpoint_refuses_names_the_limit_it_takes() {
     let server = figcraft_ai::ModelError::Status { code: 500, message: "max_tokens is [1, 100]".into() };
     assert_eq!(server.max_tokens_limit(), None, "only a refusal of the request counts");
 }
+
+#[test]
+fn every_prompt_of_a_thread_runs_its_own_tools() {
+    // The report: after the first answer the Assistant replied but stopped touching the file.
+    // The first answer closes its turn; a later prompt must open a new one, or `accept` drops the
+    // answer and never runs the tool calls in it.
+    let mut agent = Agent::new("system", vec![], AgentConfig::default());
+    agent.user("make a card");
+    assert_eq!(agent.accept(answer("Done")), Step::Done { text: "Done".into() });
+    assert!(agent.is_finished(), "the first turn is over");
+
+    agent.user("now make a button");
+    assert!(!agent.is_finished(), "a new prompt is not a finished turn");
+    let step = agent.accept(tool_call("c2", "view.zoomIn"));
+    assert!(matches!(step, Step::Tools { .. }), "the second prompt's tool call must run: {step:?}");
+    // And it runs all the way to the answer, with the tool result in the conversation.
+    assert!(matches!(agent.accept(answer("Made it")), Step::Done { text } if text == "Made it"));
+}
+
+#[test]
+fn a_new_prompt_gets_the_step_budget_back() {
+    let mut agent = Agent::new("system", vec![], AgentConfig { max_steps: 2, ..Default::default() });
+    agent.user("one");
+    assert!(matches!(agent.accept(tool_call("a", "view.zoomIn")), Step::Tools { .. }));
+    assert!(matches!(agent.accept(tool_call("b", "view.zoomIn")), Step::Stopped { .. }), "the second step is the budget");
+    agent.user("two");
+    assert!(matches!(agent.accept(tool_call("c", "view.zoomIn")), Step::Tools { .. }), "the new prompt gets its own budget, not the spent one");
+}

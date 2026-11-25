@@ -75,8 +75,13 @@ impl Agent {
         }
     }
 
-    /// Add what the user asked.
+    /// Add what the user asked. A prompt starts a turn of its own: the finished flag, the step
+    /// budget and the nudge count of the previous answer don't apply to it. Without this, every
+    /// prompt after the first finished answer was read as a turn already over: its answer was
+    /// dropped and its tool calls never ran, so the Assistant answered but never touched the file.
     pub fn user(&mut self, text: impl Into<String>) {
+        self.finished = false;
+        self.steps = 0;
         self.nudges = 0;
         self.messages.push(ChatMessage::user(text));
     }
